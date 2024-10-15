@@ -3,7 +3,7 @@
 
 import math
 from collections import namedtuple
-import exchange_customers_between_vehicles as sol1
+import customers_excgange_by_vehicle as sol1
 import Clarke_Wright_Algorithm as sol2
 import numpy as np
 import random
