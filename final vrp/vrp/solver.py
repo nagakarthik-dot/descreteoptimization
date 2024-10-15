@@ -106,10 +106,6 @@ def solve_it(input_data):
     for v in range(0, vehicle_count):
         outputData += str(depot.index) + ' ' + ' '.join([str(customers[customer].index) for customer in vehicle_tours[v]]) + ' ' + str(depot.index) + '\n'
 
-    file_path = f"Outputs\\output_{customer_count}_{vehicle_count}.txt" 
-    with open(file_path, "w") as file:
-        file.write(outputData)
-
 
     return outputData
 

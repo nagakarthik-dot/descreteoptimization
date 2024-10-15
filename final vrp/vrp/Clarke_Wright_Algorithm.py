@@ -3,13 +3,13 @@ import numpy as np
 
 
 def length(customer1, customer2):
-    """ Function to return euclidean distance between two points """
+   ###Function to return euclidean distance between two points
     return math.sqrt((customer1.x - customer2.x)**2 + (customer1.y - customer2.y)**2)
 
 
 def find_route_containing_customer(routes, customer):
 
-    """ Returns the route in which particular customer is located """
+    ###Returns the route in which particular customer is located 
     for i, route in enumerate(routes):
         if customer in route:
             return i
@@ -18,13 +18,12 @@ def find_route_containing_customer(routes, customer):
 
 def is_feasible_merge(routes, route_i, route_j, demands, vehicle_capacity):
 
-    """ Return true if merging the customer in route does not exceed the capacity of vehicle in that route """
+    ###Return true if merging the customer in route does not exceed the capacity of vehicle in that route 
     total_demand = sum(demands[customer] for customer in routes[route_i]) + sum(demands[customer] for customer in routes[route_j])
 
     return total_demand <= vehicle_capacity
 
 def two_opt(route, customers):
-    """ Applies the 2-opt algorithm to improve the given route"""
     improved = True
     best_distance = calculate_route_distance(route, customers)
     
@@ -46,7 +45,6 @@ def two_opt(route, customers):
     return route
 
 def calculate_route_distance(route, customers):
-    """Calculates the total distance of a route"""
     total_distance = 0
 
     for i in range(len(route)):
@@ -55,73 +53,58 @@ def calculate_route_distance(route, customers):
     return total_distance
 
 
-def myfun(customers, customer_count, vehicle_count, vehicle_capacity):
+import numpy as np
 
-    # Distance matrix
+def myfun(customers, customer_count, vehicle_count, vehicle_capacity):
+    #  Build the distance matrix (D)
     depot = customers[0]
-    D = [] 
+    D = []  
     for i in range(customer_count):
         temp = []
         for j in range(customer_count):
-            temp.append(length(customers[i], customers[j]))
+            temp.append(length(customers[i], customers[j]))  
         D.append(temp)
-    
 
-    # Clark and Wright Saving method
-    demands = [customer.demand for customer in customers]  # Demand of each customer (excluding depot)
-    # Step 1: Calculate savings
+    # Compute savings matrix using Clark and Wright Savings Algorithm
+    demands = [customer.demand for customer in customers]  # Demand for each customer (excluding depot)
     savings = np.zeros((customer_count, customer_count))
-    for i in range(customer_count):
+    
+    # Calculate savings for each pair of customers (i, j)
+    for i in range(1, customer_count):  
         for j in range(i+1, customer_count):
-            savings[i][j] = D[depot.index][i] + D[depot.index][j] - D[i][j]
-            savings[j][i] = savings[i][j]
+            savings[i][j] = D[0][i] + D[0][j] - D[i][j]  
+            savings[j][i] = savings[i][j]  
 
-    # Step 2: Sort pairs of customers in descending order of savings
-    sorted_indices = np.argsort(-savings, axis=None)
-    sorted_i, sorted_j = np.unravel_index(sorted_indices, savings.shape)
-    s_i = []
-    s_j = []
-    k = 0
-    while k < len(sorted_i):
-        if sorted_i[k] != 0 and sorted_j[k] != 0 and sorted_i[k] != sorted_j[k]:
-            s_i.append(sorted_i[k])
-            s_j.append(sorted_j[k])
-        k+=1
+    # Sort pairs of customers by savings in descending order
+    sorted_indices = np.argsort(-savings, axis=None) 
+    sorted_i, sorted_j = np.unravel_index(sorted_indices, savings.shape)  
+    
+    # Initialize vehicle tours: start with each customer on a separate route
     vehicle_tours = [[i] for i in range(1, customer_count)]
-
-    # Step 4: Merge routes based on savings
-    for k in range(len(s_i)):
-        i, j = s_i[k], s_j[k]
+    # Merge routes based on savings
+    for k in range(len(sorted_i)):
+        i, j = sorted_i[k], sorted_j[k]
+        
+        # Ensure valid customers (not depot, not the same customer)
+        if i == 0 or j == 0 or i == j:
+            continue
+        
+        # Find the routes that contain customer i and j
         route_i = find_route_containing_customer(vehicle_tours, i)
         route_j = find_route_containing_customer(vehicle_tours, j)
-
+        # Check if merging the two routes is feasible
         if route_i != route_j and is_feasible_merge(vehicle_tours, route_i, route_j, demands, vehicle_capacity):
+            # Merge route_j into route_i and remove route_j
             vehicle_tours[route_i] += vehicle_tours[route_j]
             del vehicle_tours[route_j]
-        
-    cnt = 0
-    if len(vehicle_tours) < vehicle_count:
-        cnt = vehicle_count - len(vehicle_tours)
-    for v in range(cnt):
-        vehicle_tours.append([])
 
-    # Apply 2-OPT
+    while len(vehicle_tours) < vehicle_count:
+        vehicle_tours.append([])
+    ### Optimize each route using the 2-OPT algorithm to minimize the distance traveled
     for v in range(vehicle_count):
         if len(vehicle_tours[v]) > 1:
-            vehicle_tours[v].insert(0, depot.index)
-            vehicle_tours[v] = two_opt(vehicle_tours[v], customers)
-            temp = vehicle_tours[v].copy()
-            vehicle_tours[v] = []
-            for i in temp:
-                if i != 0:
-                    vehicle_tours[v].append(i)
-                else:
-                    break
-            for i in reversed(temp):
-                if i != 0:
-                    vehicle_tours[v] = [i] + vehicle_tours[v]
-                else:
-                    break
+            vehicle_tours[v].insert(0, 0) 
+            vehicle_tours[v] = two_opt(vehicle_tours[v], customers)  
+            vehicle_tours[v] = [i for i in vehicle_tours[v] if i != 0]
 
     return vehicle_tours
-    
