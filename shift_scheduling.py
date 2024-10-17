@@ -2,237 +2,247 @@ import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
 import csv
+import pandas as pd
 
-# Constants for the problem
+# ----------------- Parameters -----------------
 min_value = 2      # Minimum employee requirement per hour
 max_value = 7      # Maximum employee requirement per hour
-days=15    # num of days 
-hour = 24*days      # Total hours for scheduling
+days = 30         # Number of days
+hours = 24 * days  # Total hours for scheduling
 work_hours = 9     # Number of hours an employee works in a shift
 employee_cost = 80 # Cost per employee per hour
-overnight_cost=20
-shift_break=12     # break between two shifts 
-# Generate random requirements for each hour within the specified range
-requirement = np.random.randint(min_value, max_value + 1, size=hour)
-
+shift_break = 12   # Break between two shifts in hours
 num_employees = 30 # Total number of employees
-model = gp.Model('Shift Scheduling') # Create a new Gurobi model for shift scheduling
-model.setParam('MIPGap', 0.01) 
-# Decision variables
-work = {}         # Binary decision variables for employee work shifts
-overnight = {}    # Integer decision variables for overnight shifts
 
-# Create decision variables for overnight shifts for 2 types (day and night)
-for i in range(days):
-    overnight[i]={}
-    for j in range(num_employees):
-        overnight[i][j] = model.addVar(vtype=GRB.BINARY, name=f'employee_{j}_works_overnight on day{i}')
+# Generate random requirements for each hour within the specified range
+requirement = np.random.randint(min_value, max_value + 1, size=hours)
 
-# Create binary decision variables for work shifts
-for i in range(num_employees):   
-    for j in range(hour - work_hours +1):  # Start time for shifts
-        for k in range(j, j + work_hours):  # End time for shifts
-            work[(i, j, k)] = model.addVar(vtype=GRB.BINARY, name=f'employee_{i}_start_{j}_work_{k}')
+# ----------------- Gurobi Model Initialization -----------------
+model = gp.Model('Shift Scheduling')
+model.setParam('MIPGap', 0.01)
 
-# Constraints
+# ----------------- Decision Variables -----------------
+# Binary decision variables for work shifts and overnight shifts
+work = {}         # Employee work shifts (binary)
+overnight = {}    # Employee overnight shifts (binary)
+work_day = {}     # Binary variable to track whether an employee works on a particular day (binary)
 
-# Ensure a 12-hour gap between shifts
-for i in range(num_employees):
-    for j in range(hour - work_hours + 1):
-        for k in range(j + 1, min(hour-work_hours+1,j + work_hours+shift_break-1)):  # Check the next 20 hours
-            model.addConstr(work[(i, k, k)] + work[(i, j, j)] <= 1)  # No overlap in shifts
+# Overnight shift variables
+for day in range(days):
+    overnight[day] = {}
+    for employee in range(num_employees):
+        overnight[day][employee] = model.addVar(vtype=GRB.BINARY, name=f'employee_{employee}_overnight_day{day}')
 
-# Ensure that the total worked hours in a shift equals 8
-for i in range(num_employees):
-    for j in range(hour - work_hours + 1):
-        model.addConstr(gp.quicksum(work[(i, j, k)] for k in range(j, j + work_hours)) == 8 * work[(i, j, j)])
+# Work shift variables
+for employee in range(num_employees):
+    for start in range(hours - work_hours + 1):  # Start time for shifts
+        for end in range(start, start + work_hours):  # End time for shifts
+            work[(employee, start, end)] = model.addVar(vtype=GRB.BINARY, name=f'employee_{employee}_start_{start}_end_{end}')
 
-# Ensure that during a shift, at least 2 of the 3 hours (3rd to 6th) are worked
-for i in range(num_employees):
-    for j in range(hour - work_hours + 1):
-        model.addConstr(gp.quicksum(work[(i, j, k)] for k in range(j + 3, j + 6)) == 2 * work[(i, j, j)])
+# Work day variables
+for employee in range(num_employees):
+    for day in range(days):
+        work_day[(employee, day)] = model.addVar(vtype=GRB.BINARY, name=f'employee_{employee}_work_day_{day}')
 
+# ----------------- Constraints -----------------
+# 1. Ensure a 12-hour gap between shifts
+for employee in range(num_employees):
+    for start in range(hours - work_hours + 1):
+        for next_start in range(start + 1, min(hours - work_hours + 1, start + work_hours + shift_break - 1)):
+            model.addConstr(work[(employee, next_start, next_start)] + work[(employee, start, start)] <= 1)
 
-# # Ensure overnight shifts are counted correctly
-for i in range(num_employees):
-    for k in range(days):
-        for j in range(max(0, 24 * k - 7), 24 * k + 6):
-            model.addConstr(overnight[k][i] >= work[i, j, j])  # Count overnight shifts
+# 2. Ensure total worked hours in a shift equals 8
+for employee in range(num_employees):
+    for start in range(hours - work_hours + 1):
+        model.addConstr(gp.quicksum(work[(employee, start, end)] for end in range(start, start + work_hours)) == 8 * work[(employee, start, start)])
 
-# Requirement satisfaction constraints
-for k in range(hour):
-    model.addConstr(gp.quicksum(work[(i, j, k)] for i in range(num_employees)
-                                for j in range( k - work_hours + 1, k + 1)
-                                if (i, j, k) in work) >= requirement[k])  # Meet hourly requirements
+# 3. At least 2 of the 3 hours (3rd to 6th) must be worked
+for employee in range(num_employees):
+    for start in range(hours - work_hours + 1):
+        model.addConstr(gp.quicksum(work[(employee, start, hour)] for hour in range(start + 3, start + 6)) == 2 * work[(employee, start, start)])
 
-# Objective Function
+# 4. Overnight shifts are counted correctly
+for employee in range(num_employees):
+    for day in range(days):
+        for hour in range(max(0, 24 * day - 7), 24 * day + 6):
+            model.addConstr(overnight[day][employee] >= work[(employee, hour, hour)])
+
+# 5. Meet hourly requirements
+for hour in range(hours):
+    model.addConstr(gp.quicksum(work[(employee, start, hour)] for employee in range(num_employees)
+                                for start in range(hour - work_hours + 1, hour + 1)
+                                if (employee, start, hour) in work) >= requirement[hour])
+
+# 6. Ensure at least one and at most three holidays per employee
+for employee in range(num_employees):
+    # Ensure each employee works at least 12 and at most 14 days
+    model.addConstr(gp.quicksum(work_day[(employee, day)] for day in range(days)) >= 27)  # Minimum 12 days worked
+    model.addConstr(gp.quicksum(work_day[(employee, day)] for day in range(days)) <= 29)  # Maximum 14 days worked
+
+# 7. Define work_day based on whether the employee works on a particular day
+for employee in range(num_employees):
+    for day in range(1,days-1):
+        model.addConstr(gp.quicksum(work[(employee, start, end)] for start in range(day * 24, (day + 1) * 24 - work_hours + 1) for end in range(start, start + work_hours)) >= work_day[(employee, day)])
+        # Ensure if no work in a day, then no work_day
+        model.addConstr(gp.quicksum(work[(employee, start, end)] 
+                                    for end in range(day * 24, (day + 1) * 24 ) 
+                                    for start in range(max(0,end-8),min(hours,end+1))) <= 24 * work_day[(employee, day)])
+
+# ----------------- Objective Function -----------------
+# Minimize total cost (weighted cost of shifts and overnight shifts)
 model.setObjective(
-    employee_cost/8 * (gp.quicksum(work[(i, j, k)] for i in range(num_employees)
-                      for j in range(hour - work_hours + 1)
-                      for k in range(j, j + work_hours))) +
-     overnight_cost * (gp.quicksum(overnight[k][i] for k in range(days) for i in range(num_employees))),
-    GRB.MINIMIZE)  # Minimize total cost of scheduling
+    10 * gp.quicksum(work[(employee, start, end)] for employee in range(num_employees)
+                     for start in range(hours - work_hours + 1)
+                     for end in range(start, start + work_hours)) +
+    20 * gp.quicksum(overnight[day][employee] for day in range(days) for employee in range(num_employees)),
+    GRB.MINIMIZE)
 
-# Optimize the model
+# ----------------- Model Optimization -----------------
 model.optimize()
 
+# ----------------- Output -----------------
 # Check if the solution is optimal
 if model.status == GRB.OPTIMAL:
     print(f'Optimal objective value (total cost): {model.objVal}')
-    
-    # Prepare data for CSV output
+
+    for i in range(num_employees):
+        for d in range(days):
+            if work_day[(i,d)].x<0.5:
+                print(f'employee {i} holiday on day{d}')
+    num_shifts=[0 for _ in range(num_employees)]
+    # CSV Output for shift schedule
     with open('shift_schedule_output.csv', 'w', newline='') as csvfile:
-        fieldnames = ['Employee','Day', 'Start Hour', 'Lunch Hour','End', 'Overnight']
+        fieldnames = ['Employee', 'Day', 'Start Hour', 'Lunch Hour', 'End', 'Overnight']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
-        # Write the optimal shift schedule to the CSV
-        for i in range(num_employees):
-         # Determine if the employee works overnight
-            for j in range(hour - work_hours + 1):
-                if work[(i, j, j)].x > 0.9:  # Check if the employee starts work at hour j
-                    for k in range(j, j + work_hours):  # Record the working hours
-                        day=k//24
-                        overnight_flag=1 if overnight[day][i].x>0.5 else 0
-                        if work[(i, j, k)].x < 0.5:
-                            writer.writerow({
-                            'Employee': i,
-                            'Day':day,
-                            'Start Hour': j,
-                            'Lunch Hour': k,
-                            'End' : j+8,
-                            'Overnight': overnight_flag
-                        })
-    print('Output saved to shift_schedule_output.csv')  # Indicate successful CSV writing
-
-    with open('shift_schedule_peroutput.csv', 'w', newline='') as csvfile:
-        fieldnames = ['day', 'Hour', 'Requirement','working_employees', 'count of employee working','extra']
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
-        employee = [[] for _ in range(hour)] 
-        # Write the optimal shift schedule to the CSV
-        for i in range(num_employees):
-            for j in range(hour-8):
-                for k in range(j,j+9):
-                    if work[(i,j,k)].x>0.5:
-                        employee[k].append(i)
-        for k in range(hour):
-            writer.writerow({
-                'day' :k//24,
-                'Hour':k,
-                'Requirement': requirement[k],
-                'working_employees': employee[k],
-                'count of employee working':len(employee[k]),
-                'extra': len(employee[k])-requirement[k]
-            })
-
-else:
-    print('No optimal solution found.')  # Indicate if no optimal solution was found
-
-
-
-
-
-
-import pandas as pd
-
-# Initialize a dictionary to hold data for each day
-shift_data = {day: [] for day in range(days)}  # Assuming a 7-day week
-num_shifts=[0 for _ in range(num_employees)]
-num_overnight=[0 for _ in range(num_employees)]
-# Process the optimal shift schedule
-for i in range(num_employees):
-    for j in range(hour - work_hours + 1):
-        if work[(i, j, j)].x > 0.9:  # Check if the employee starts work at hour j
-            num_shifts[i]+=1
-            overnight_flag = 1 if overnight[day][i].x > 0.5 else 0
-            #num_overnight[i]+=overnight_flag
-            for k in range(j, j + work_hours):  # Record the working hours
-                day = k // 24
-                overnight_flag = 1 if overnight[day][i].x > 0.5 else 0
-                if work[(i, j, k)].x < 0.5:
-                    # Append the shift data for the employee on the current day
-                    shift_data[day].append({
-                        'Employee_id': i,
-                        'Start Hour of employee': j%24,
-                        'Break Hour of employee': k%24,
-                        'Ending hour of employee': (j + 8)%24,
-                        'employee working Overnight': overnight_flag
+        # Write the optimal shift schedule
+        for employee in range(num_employees):
+            for start in range(hours - work_hours + 1):
+                if work[(employee, start, start)].x > 0.9:  # Check if employee starts work
+                    num_shifts[employee]+=1
+                    day = start // 24
+                    overnight_flag = 1 if overnight[day][employee].x > 0.5 else 0
+                    writer.writerow({
+                        'Employee': employee,
+                        'Day': day,
+                        'Start Hour': start % 24,
+                        'Lunch Hour': (start + 4) % 24,
+                        'End': (start + 8) % 24,
+                        'Overnight': overnight_flag
                     })
 
-# Create an Excel writer object
-with pd.ExcelWriter('employee_shift_details.xlsx') as writer:
-    # Write each day's data into a separate sheet
-    for day in range(days):  
-        # Convert the shift data to a DataFrame
-        df = pd.DataFrame(shift_data[day])
-        # Write to an Excel sheet with the day as the sheet name
-        df.to_excel(writer, sheet_name=f'Day_{day + 1}', index=False)
+    print('Shift schedule saved to shift_schedule_output.csv')
 
-print('Output saved to employee_shift_details.xlsx')
+    # CSV Output for daily requirements and employee count
+    employee_schedule = [[] for _ in range(hours)]
+    with open('shift_schedule_peroutput.csv', 'w', newline='') as csvfile:
+        fieldnames = ['Day', 'Hour', 'Requirement', 'Working Employees', 'Count of Employees Working', 'Extra']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
 
-import pandas as pd
+        for employee in range(num_employees):
+            for start in range(hours - work_hours + 1):
+                for end in range(start, start + work_hours):
+                    if work[(employee, start, end)].x > 0.5:
+                        employee_schedule[end].append(employee)
 
-# Initialize a dictionary to hold data for each day
-shift_data1 = {day: [] for day in range(days)}  # Assuming a 7-day week
+        for hour in range(hours):
+            day = hour // 24
+            writer.writerow({
+                'Day': day,
+                'Hour': hour % 24,
+                'Requirement': requirement[hour],
+                'Working Employees': employee_schedule[hour],
+                'Count of Employees Working': len(employee_schedule[hour]),
+                'Extra': len(employee_schedule[hour]) - requirement[hour]
+            })
 
-employee = [[] for _ in range(hour)]
+    print('Daily requirements saved to shift_schedule_peroutput.csv')
 
-# Process the optimal shift schedule
-for i in range(num_employees):
-    for j in range(hour - 8):
-        for k in range(j, j + 9):
-            if work[(i, j, k)].x > 0.5:
-                employee[k].append(i)
+    # Excel Output for detailed employee shift data
+    shift_data = {day: [] for day in range(days)}
+    num_shifts = [0 for _ in range(num_employees)]
 
-# Organize data into day-wise format
-for k in range(hour):
-    day = k // 24
-    shift_data1[day].append({
-        'Hour': k % 24,  # Only showing the hour within the day
-        'Requirement': requirement[k],
-        'working_employees_id': employee[k],
-        'Number of employees working': len(employee[k])
-        #'extra': len(employee[k]) - requirement[k]
-    })
+    for employee in range(num_employees):
+        for start in range(hours - work_hours + 1):
+            if work[(employee, start, start)].x > 0.9:
+                day = start // 24
+                num_shifts[employee] += 1
+                overnight_flag = 1 if overnight[day][employee].x > 0.5 else 0
+                shift_data[day].append({
+                    'Employee_id': employee,
+                    'Start Hour': start % 24,
+                    'Break Hour': (start + 4) % 24,
+                    'End Hour': (start + 8) % 24,
+                    'Overnight': overnight_flag
+                })
 
-# Create an Excel writer object
-with pd.ExcelWriter('Daily requirement.xlsx') as writer:
-    # Write each day's data into a separate sheet
-    for day in range(days):  # Assuming 7 days
-        # Convert the shift data to a DataFrame
-        df = pd.DataFrame(shift_data1[day])
-        # Write to an Excel sheet with the day as the sheet name
-        df.to_excel(writer, sheet_name=f'Day_{day + 1}', index=False)
+    with pd.ExcelWriter('employee_shift_details.xlsx') as writer:
+        for day in range(days):
+            df = pd.DataFrame(shift_data[day])
+            df.to_excel(writer, sheet_name=f'Day_{day + 1}', index=False)
 
-print('Output saved to Daily requirement.xlsx')
+    print('Employee shift details saved to employee_shift_details.xlsx')
 
-
-import pandas as pd
-cost_data = []
-
-# Process the optimal shift schedule
-for i in range(num_employees):
-    total_cost = (
-        10 * gp.quicksum(work[(i, j, k)].x for j in range(hour - work_hours + 1) for k in range(j, j + work_hours))
-        + 20 * gp.quicksum(overnight[k][i].x for k in range(days))
-    )
+    # Excel Output for daily requirement details
+    shift_data1 = {day: [] for day in range(days)}
+    employee_schedule = [[] for _ in range(hours)]
     
-    # Append a dictionary with employee and their calculated cost
-    cost_data.append({
-        'employee_id': i,
-        'cost of hiring': total_cost,
-        'number of shifts worked':num_shifts[i]
-       # 'number of overnight shifts':num_overnight[i]
 
-    })
+    for employee in range(num_employees):
+        for start in range(hours - 8):
+            for end in range(start, start + 9):
+                if work[(employee, start, end)].x > 0.5:
+                    employee_schedule[end].append(employee)
 
-# Create a DataFrame from the cost data
-df = pd.DataFrame(cost_data)
+    for hour in range(hours):
+        day = hour // 24
+        res=[]
+        for i in range(num_employees):
+            if work_day[(i,day)].x<0.5:
+                res.append(i)
+        shift_data1[day].append({
+            'Hour': hour % 24,
+            'Requirement': requirement[hour],
+            'Working Employees': employee_schedule[hour],
+            'Number of Employees Working': len(employee_schedule[hour])
+            #'employee on holiday':res
+        })
+    extraaa={day: [] for day in range(days)}
+    for day in range(days):
+        for i in range(num_employees):
+            if work_day[(i,day)].x<=0.5:
+                extraaa[day].append(i)
+    with pd.ExcelWriter('Holiday requirement.xlsx') as writer:
+        for day in range(days):
+            df = pd.DataFrame(extraaa[day],columns=['id'])
+            df.to_excel(writer, sheet_name=f'Day_{day + 1}', index=False)
+    
+    with pd.ExcelWriter('Daily requirement.xlsx') as writer:
+        for day in range(days):
+            df = pd.DataFrame(shift_data1[day])
+            df.to_excel(writer, sheet_name=f'Day_{day + 1}', index=False)
 
-# Create an Excel writer object
-with pd.ExcelWriter('shift_schedule_cost.xlsx') as writer:
-    # Write the data to an Excel sheet
-    df.to_excel(writer, index=False)
 
-print('Output saved to shift_schedule_cost.xlsx')
+    print('Daily requirement saved to Daily requirement.xlsx')
+
+    # Excel Output for employee cost data
+    cost_data = []
+    for employee in range(num_employees):
+        total_cost = (
+            10 * gp.quicksum(work[(employee, start, end)].x for start in range(hours - work_hours + 1) for end in range(start, start + work_hours)) +
+            20 * gp.quicksum(overnight[day][employee].x for day in range(days))
+        )
+        cost_data.append({
+            'Employee ID': employee,
+            'Cost': total_cost,
+            'number of shifts worked':num_shifts[employee]
+        })
+
+    df = pd.DataFrame(cost_data)
+    df.to_excel('Employee_cost.xlsx', index=False)
+    print('Employee cost saved to Employee_cost.xlsx')
+
+else:
+    print('Optimal solution not found.')
