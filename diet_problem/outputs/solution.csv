@@ -1,11 +1,12 @@
 Item,New servings
+apple,1.0
 Big Mac,-0.0
 Quarter Pounder,-0.0
-Vegetable Burger,1.0
-French Fries,-0.0
+Vegetable Burger,2.0
+French Fries,2.0
 Salad,-0.0
 Lowfat Milk,-0.0
-Coca Cola,1.0
-Big Mac Menu,-0.0
-Quarter Pounder Menu,2.0
-Optimal Cost,24.599999999999998
+Coca Cola,0.0
+Big Mac Menu,1.0
+Quarter Pounder Menu,-0.0
+Optimal Cost,23.75
