@@ -85,7 +85,7 @@ def display_output_data():
         # Display the DataFrame as a table
         st.table(output_df)
     else:
-        st.error("No output file found. Please run the optimization first.")
+        st.error("No output file found. Please run the optimization first or model doesn't have an optimal solution .")
 
 def main():
     st.title("Diet Optimization Dashboard")
