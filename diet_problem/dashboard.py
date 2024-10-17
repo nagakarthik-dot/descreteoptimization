@@ -68,8 +68,8 @@ def run_optimization():
     """Run the optimization script."""
     try:
         # Run the main.py script
-        #subprocess.run(["C:/Users/olw09/.pyenv/pyenv-win/versions/3.11.3/python.exe", "diet_problem/main.py"], check=True)
-        subprocess.run([sys.executable, "diet_problem/main.py"], check=True)
+        subprocess.run(["C:/Users/olw09/.pyenv/pyenv-win/versions/3.11.3/python.exe", "diet_problem/main.py"], check=True)
+        #subprocess.run([sys.executable, "diet_problem/main.py"], check=True)
         st.success("Optimization completed successfully.")
     except subprocess.CalledProcessError as e:
         st.error(f"Error in optimization: {e}")
