@@ -1,13 +1,14 @@
 Solution:
-Objective value = 24.599999999999998
+Objective value = 20.6
 
 Item            New servings   
-Big Mac         -0.00           
+apple           1.00            
+Big Mac         0.00            
 Quarter Pounder -0.00           
-Vegetable Burger 1.00            
-French Fries    -0.00           
+Vegetable Burger -0.00           
+French Fries    2.00            
 Salad           -0.00           
-Lowfat Milk     -0.00           
-Coca Cola       1.00            
+Lowfat Milk     1.00            
+Coca Cola       3.00            
 Big Mac Menu    -0.00           
-Quarter Pounder Menu 2.00            
+Quarter Pounder Menu 1.00            

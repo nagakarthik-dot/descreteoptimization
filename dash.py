@@ -94,5 +94,3 @@ with tabs[1]:
         st.pyplot(plt)
 
     
-
-st.sidebar.info("Use the sidebar to select day-wise results and visualization options.")
