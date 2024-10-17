@@ -7,15 +7,17 @@
 import subprocess
 import sys
 
-# Function to install a package
-def install_package(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+# Function to install multiple packages
+def install_packages(*packages):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", *packages])
 
-# Install openpyxl
-install_package("pandas openpyxl")
+# Install pandas and openpyxl
+install_packages("pandas", "openpyxl")
 
-# Now you can import and use openpyxl
+# Now you can import and use the installed packages
+import pandas as pd
 import openpyxl
+
 
 # Your code that uses openpyxl here
 
