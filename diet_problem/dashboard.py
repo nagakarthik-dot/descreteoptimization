@@ -4,6 +4,20 @@
 # import os
 # import subprocess
 # from input_data import InputData
+import subprocess
+import sys
+
+# Function to install a package
+def install_package(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+# Install openpyxl
+install_package("pandas openpyxl")
+
+# Now you can import and use openpyxl
+import openpyxl
+
+# Your code that uses openpyxl here
 
 # def load_data():
 #     """Load the input data for the optimization problem."""
