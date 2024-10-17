@@ -14,7 +14,6 @@ def display_input_data(data):
     """Display the input data in a table format and allow modifications."""
     st.subheader("Input Data")
 
-    # Initialize session state for nutrition_df if not already done
     if 'nutrition_df' not in st.session_state:
         st.session_state['nutrition_df'] = pd.DataFrame({
             'Item': data.items,
@@ -26,10 +25,9 @@ def display_input_data(data):
             'Price (Hfl)': data.price
         })
 
-    # Get the DataFrame from session state
     nutrition_df = st.session_state['nutrition_df']
 
-    # Button to toggle the "Add New Row" form
+    # Button to "Add New Row" form
     with st.expander("Add New Row", expanded=False):
         with st.form("add_row_form", clear_on_submit=True):
             new_item = st.text_input("Item")
@@ -52,7 +50,6 @@ def display_input_data(data):
                     'Max Servings': new_servings,
                     'Price (Hfl)': new_price
                 }
-                # Append the new row to the DataFrame in session state
                 st.session_state['nutrition_df'] = pd.concat([ pd.DataFrame([new_row]),nutrition_df], ignore_index=True)
                 st.success("New row added successfully!")
 
